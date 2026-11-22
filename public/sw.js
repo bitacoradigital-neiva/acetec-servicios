@@ -1,7 +1,7 @@
 // Guarda la app en el celular para que abra sin señal.
 // Si cambias algún archivo, sube el número de versión para que todos reciban la actualización.
-const VERSION = 'acetec-v9';
-const ARCHIVOS = ['./', 'index.html', 'config.js', 'vendor/supabase.js', 'vendor/jspdf.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const VERSION = 'acetec-v11';
+const ARCHIVOS = ['./', 'index.html', 'config.js', 'vendor/jspdf.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));

@@ -12,7 +12,6 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="ACETEC">
 <script src="config.js"></script>
-<script src="vendor/supabase.js"></script>
 <style>
 :root{color-scheme:light;--navy:#020C22;--navy-2:#0A1A3F;--p:#024CAF;--p-d:#013A87;--p-l:#1281CF;--r:#CC1204;--r-d:#A40102;--gold:#EBBA0B;--ice:#EAF1FB;--steel:#53627B;--bg:#F3F6FB;--tx:#0E1A33;--bd:#DCE3EE;--wa:#0B7A08;--wa-d:#086305;--warn:#A40102;--amber:#8A5000;--sh1:0 1px 2px rgba(2,12,34,.06),0 1px 3px rgba(2,12,34,.04);--sh2:0 10px 30px rgba(2,40,100,.14),0 2px 6px rgba(2,12,34,.06);--rl:16px;--rm:12px;--rs:10px;
  --f:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--fc:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;--ease:cubic-bezier(.2,.8,.2,1)}
@@ -366,6 +365,7 @@ input,textarea,select{border-radius:12px}
 <h2 style="margin:8px 0 0">ACETEC</h2><div class="muted">Venta de repuestos y reparación</div>
 <label style="text-align:left">Correo</label><input id="lg_email" type="email" autocomplete="username" required>
 <label style="text-align:left">Clave</label><input id="lg_pass" type="password" autocomplete="current-password" required>
+<div class="muted" style="font-size:13px;margin-top:6px">Se pide una sola vez en este equipo.</div>
 <button class="btn pr" style="width:100%;justify-content:center;margin-top:14px">Entrar</button>
 <div id="lg_msg" class="muted" style="margin-top:10px"></div></form></div>
 <div class="modal" id="modal"><div class="card" id="modalBody"></div></div>
@@ -392,21 +392,26 @@ function save(){const now=Date.now();
  const jc=JSON.stringify(cfgDe());if(synced.__cfg!==jc){state.cfgAt=now;synced.__cfg=jc;pend.add('__cfg')}
  persist();estado();flush()}
 const conTiempo=(p,ms)=>Promise.race([p,new Promise((_,r)=>setTimeout(()=>r({message:'timeout'}),ms))]);
-let sb=null,sesion=null,lastPull=null;
-try{lastPull=localStorage.getItem('st_pull')}catch(e){}
-async function flush(){if(!sb||!sesion||flushing||!navigator.onLine||!pend.size)return;flushing=true;estado();
- try{for(const id of [...pend]){
-  const esCfg=id==='__cfg';
-  const body=esCfg?{...cfgDe(),updatedAt:state.cfgAt}:state.servicios.find(x=>x.id===id);
-  if(!body){pend.delete(id);continue}
-  const before=esCfg?synced.__cfg:synced[id];
-  const fila=esCfg?{id:'app',data:body,updated_at:body.updatedAt||0}:{id,data:body,updated_at:body.updatedAt||0,borrado:!!body.borrado};
-  try{const {error}=await conTiempo(sb.from(esCfg?'config':'servicios').upsert(fila),25000);if(error)throw error}
-  catch(e){console.warn(e);break}
-  if((esCfg?synced.__cfg:synced[id])===before)pend.delete(id)}
+let api=null,codigo=null,lastPull=0;
+try{codigo=JSON.parse(localStorage.getItem('st_cred')||'null');lastPull=Number(localStorage.getItem('st_pull2')||0)}catch(e){}
+async function apiSheets(accion,datos){const r=await conTiempo(fetch(api,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({correo:codigo&&codigo.correo,clave:codigo&&codigo.clave,accion},datos||{}))}).then(x=>x.json()),45000);
+ if(!r||!r.ok){const e=new Error((r&&r.error)||'error');e.codigo=r&&r.error;
+  if(e.codigo==='codigo'&&codigo){codigo=null;try{localStorage.removeItem('st_cred')}catch(_){};mostrarLogin()}throw e}return r}
+async function flush(){if(!api||!codigo||flushing||!navigator.onLine||!pend.size)return;flushing=true;estado();let otraVez=false;
+ try{const ids=[...pend].slice(0,8),antes={},filas=[];
+  for(const id of ids){const esCfg=id==='__cfg';const body=esCfg?{...cfgDe(),updatedAt:state.cfgAt}:state.servicios.find(x=>x.id===id);
+   if(!body){pend.delete(id);continue}
+   antes[id]=esCfg?synced.__cfg:synced[id];
+   filas.push(esCfg?{tabla:'config',id:'app',data:body,updated_at:body.updatedAt||0}:{tabla:'servicios',id,data:body,updated_at:body.updatedAt||0,borrado:!!body.borrado})}
+  if(filas.length){let r;try{r=await apiSheets('subir',{filas})}catch(e){console.warn(e);dbState='error';return}
+   for(const g of r.guardados||[]){
+    if(g.tabla==='config'){if(synced.__cfg===antes.__cfg)pend.delete('__cfg');continue}
+    const l=state.servicios.find(x=>x.id===g.id);if(!l){pend.delete(g.id);continue}
+    if(synced[g.id]===antes[g.id]){if(g.fotos)l.fotos=g.fotos;if(g.fotosFin)l.fotosFin=g.fotosFin;synced[g.id]=firma(l);pend.delete(g.id)}}
+   otraVez=pend.size>0}
   if(!pend.size){lastSync=Date.now();dbState='ok'}}
  finally{flushing=false;persist();estado()}
- if(pend.size&&navigator.onLine)setTimeout(flush,15000)}
+ if(pend.size&&navigator.onLine)setTimeout(flush,otraVez?500:15000)}
 function repintar(){if(view!=='nuevo'&&!document.getElementById('modal').classList.contains('on'))render()}
 function aplicarServicio(r){if(!r||!r.id)return false;const l=state.servicios.find(x=>x.id===r.id);
  if(pend.has(r.id)&&l&&(l.updatedAt||0)>=(r.updatedAt||0))return false;
@@ -415,58 +420,44 @@ function aplicarCfg(r){if(!r)return false;
  if(pend.has('__cfg')&&(state.cfgAt||0)>=(r.updatedAt||0))return false;
  if((r.updatedAt||0)>(state.cfgAt||0)){state.users=r.users;state.negocio=r.negocio;state.cfgAt=r.updatedAt;synced.__cfg=JSON.stringify(cfgDe());pend.delete('__cfg');return true}return false}
 let pulling=false;
-async function pull(){if(!sb||!sesion||pulling||!navigator.onLine)return;pulling=true;
- try{let cambio=false,maxTs=lastPull;
-  for(const t of ['config','servicios']){let q=sb.from(t).select('id,data,modificado').order('modificado').limit(1000);if(lastPull)q=q.gt('modificado',lastPull);
-   const {data,error}=await conTiempo(q,25000);if(error)throw error;
-   for(const f of data){if(t==='config'?aplicarCfg(f.data):aplicarServicio(f.data))cambio=true;if(!maxTs||f.modificado>maxTs)maxTs=f.modificado}}
-  lastPull=maxTs;try{localStorage.setItem('st_pull',lastPull||'')}catch(e){}
-  vincularUsuario();
+async function pull(){if(!api||!codigo||pulling||!navigator.onLine)return;pulling=true;
+ try{let cambio=false;const r=await apiSheets('bajar',{desde:Math.max(0,lastPull-5000)});
+  for(const c of r.config||[])if(aplicarCfg(c))cambio=true;
+  for(const x of r.servicios||[])if(aplicarServicio(x))cambio=true;
+  lastPull=Math.max(lastPull,Number(r.ahora)||0);try{localStorage.setItem('st_pull2',String(lastPull))}catch(e){}
   if(!pend.size){lastSync=Date.now()}dbState='ok';if(cambio){persist();repintar()}}
  catch(e){console.warn(e);dbState='error'}finally{pulling=false;estado()}}
-function vincularUsuario(){const email=(sesion?.user?.email||'').toLowerCase();if(!email)return;
- let u=state.users.find(x=>(x.email||'').toLowerCase()===email);
- if(!u){u=state.users.find(x=>!x.email);if(u){u.email=email}else{u={id:uid(),nombre:email.split('@')[0],rol:'Técnico',email};state.users.push(u)}save()}
- if(state.cur!==u.id){state.cur=u.id;persist();repintar()}}
+function vincularUsuario(){}
 async function sincronizar(){await flush();await pull();await flush()}
 async function conectar(){
- if(!window.supabase||!window.ACETEC_CONFIG||!ACETEC_CONFIG.SUPABASE_URL.startsWith('http')){dbState='local';estado();return}
- sb=supabase.createClient(ACETEC_CONFIG.SUPABASE_URL,ACETEC_CONFIG.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
- const {data}=await sb.auth.getSession();sesion=data.session;
- sb.auth.onAuthStateChange((_e,s)=>{sesion=s;if(!s)mostrarLogin()});
- if(!sesion){mostrarLogin();return}
+ if(!window.ACETEC_CONFIG||!String(ACETEC_CONFIG.SHEETS_URL||'').startsWith('https://')){dbState='local';estado();return}
+ api=ACETEC_CONFIG.SHEETS_URL;
+ if(!codigo){mostrarLogin();return}
  ocultarLogin();sincronizar();setInterval(()=>{if(document.visibilityState==='visible')sincronizar()},30000)}
 function mostrarLogin(){document.getElementById('login').style.display='flex'}
 function ocultarLogin(){document.getElementById('login').style.display='none'}
-async function entrar(e){e.preventDefault();const m=document.getElementById('lg_msg');m.textContent='Entrando…';
+async function entrar(e){e.preventDefault();const m=document.getElementById('lg_msg');const v={correo:lg_email.value.trim().toLowerCase(),clave:lg_pass.value};
+ if(!v.correo||!v.clave){m.textContent='Escribe el correo y la clave.';return}
  if(!navigator.onLine){m.textContent='Para entrar la primera vez necesitas señal.';return}
- const {data,error}=await sb.auth.signInWithPassword({email:lg_email.value.trim(),password:lg_pass.value});
- if(error){m.textContent='Correo o clave incorrectos.';return}
- sesion=data.session;m.textContent='';ocultarLogin();lastPull=null;await sincronizar();vincularUsuario();render()}
+ m.textContent='Entrando…';codigo=v;
+ try{await apiSheets('probar')}catch(err){codigo=null;m.textContent=err.codigo==='bloqueado'?'Demasiados intentos. Espera 10 minutos y vuelve a intentar.':err.codigo==='codigo'?'Correo o clave incorrectos.':'No se pudo conectar. Revisa la señal e intenta de nuevo.';return}
+ try{localStorage.setItem('st_cred',JSON.stringify(v))}catch(_){}
+ m.textContent='';ocultarLogin();lastPull=0;await sincronizar();render();
+ if(!window.__sinc){window.__sinc=setInterval(()=>{if(document.visibilityState==='visible')sincronizar()},30000)}}
 async function salir(){if(pend.size&&!confirmarSalida)return modal(`<h3>Tienes ${pend.size} cambio(s) sin subir</h3><p>Si sales ahora se pierden. Conéctate a internet primero.</p><div class="row"><button class="btn dg" onclick="confirmarSalida=true;salir()">Salir de todos modos</button><button class="btn" onclick="cerrarModal()">Cancelar</button></div>`);
- confirmarSalida=false;cerrarModal();try{localStorage.removeItem('st_app');localStorage.removeItem('st_sync');localStorage.removeItem('st_pull')}catch(e){}
- if(sb)await sb.auth.signOut();location.reload()}
+ confirmarSalida=false;cerrarModal();try{localStorage.removeItem('st_app');localStorage.removeItem('st_sync');localStorage.removeItem('st_pull2');localStorage.removeItem('st_cred')}catch(e){}
+ location.reload()}
 let confirmarSalida=false;
-async function crearUsuario(){const n=nu_nombre.value.trim(),em=nu_email.value.trim(),pw=nu_pass.value;const m=document.getElementById('nu_msg');
- if(!n||!em||pw.length<6){m.textContent='Llena nombre, correo y una clave de mínimo 6 caracteres.';return}
- if(!navigator.onLine){m.textContent='Para crear usuarios necesitas señal.';return}
- m.textContent='Creando…';
- {const {error}=await sb.from('permitidos').upsert({email:em.toLowerCase()});if(error){m.textContent='No se pudo autorizar el correo: '+error.message;return}}
- const tmp=supabase.createClient(ACETEC_CONFIG.SUPABASE_URL,ACETEC_CONFIG.SUPABASE_ANON_KEY,{auth:{persistSession:false,autoRefreshToken:false,storageKey:'acetec-tmp'}});
- const {error}=await tmp.auth.signUp({email:em,password:pw});
- if(error&&!/already|registered/i.test(error.message)){m.textContent='No se pudo crear: '+error.message;return}
- const libre=state.users.find(x=>!x.email);
- if(libre&&confirm_libre){libre.email=em.toLowerCase();libre.nombre=n}else state.users.push({id:uid(),nombre:n,rol:nu_rol.value,email:em.toLowerCase()});
- save();cerrarModal();toast('Usuario creado. Ya puede entrar con su correo y clave.');render()}
-let confirm_libre=false;
-function formUsuario(libreId){confirm_libre=!!libreId;const u=libreId?state.users.find(x=>x.id===libreId):null;
- modal(`<h3 style="margin-top:0">${u?'Dar acceso a '+esc(u.nombre):'Nuevo usuario'}</h3>
- <label>Nombre</label><input id="nu_nombre" value="${esc(u?u.nombre:'')}">
- <label>Correo (con este entra)</label><input id="nu_email" type="email">
- <label>Clave (mínimo 6)</label><input id="nu_pass" type="text">
+function crearUsuario(){const n=nu_nombre.value.trim();const m=document.getElementById('nu_msg');
+ if(!n){m.textContent='Escribe el nombre.';return}
+ state.users.push({id:uid(),nombre:n,rol:nu_rol.value});
+ save();cerrarModal();toast('Usuario agregado');render()}
+function formUsuario(){
+ modal(`<h3 style="margin-top:0">Nuevo usuario</h3>
+ <label>Nombre</label><input id="nu_nombre">
  <label>Rol</label><select id="nu_rol"><option>Técnico</option><option>Administración</option></select>
  <div id="nu_msg" class="muted" style="margin-top:8px"></div>
- <div class="row" style="margin-top:12px"><button class="btn pr" onclick="crearUsuario()">Crear acceso</button><button class="btn" onclick="cerrarModal()">Cancelar</button></div>`)}
+ <div class="row" style="margin-top:12px"><button class="btn pr" onclick="crearUsuario()">Agregar</button><button class="btn" onclick="cerrarModal()">Cancelar</button></div>`)}
 function estado(){const el=document.getElementById('sync');if(!el)return;const n=pend.size,on=navigator.onLine;let t,c;
  if(!on){t=n?`⟪wifioff⟫ Sin señal · ${n} cambio${n>1?'s':''} guardado${n>1?'s':''} en el equipo`:'⟪wifioff⟫ Sin señal · todo guardado en el equipo';c='#8A5000'}
  else if(dbState==='sinclave'){t='⟪device⟫ Guardando en este equipo';c='#53627B'}
@@ -659,6 +650,10 @@ const $=v=>'$'+(v||0).toLocaleString('es-CO');
 function textoRecibo(s){const N=state.negocio;
  return `*${N.nombre}*${N.lema?'\n'+N.lema:''}${N.tel?'\nWhatsApp: '+N.tel:''}\n\n*COMPROBANTE DE SERVICIO N° ${String(s.consecutivo).padStart(4,'0')}*\nFecha: ${new Date(s.cerradoEn).toLocaleDateString('es-CO')}\n\nCliente: ${s.cliente}\nDirección: ${s.dir}\nProducto: ${s.producto}\nFalla: ${s.falla}\n\nTrabajo realizado: ${s.trabajo}${s.repUsados?'\nRepuestos: '+s.repUsados:''}\n\nMano de obra: ${$(s.mo)}\nRepuestos: ${$(s.vr)}\n*TOTAL: ${$(s.mo+s.vr)}*\n\nGarantía: ${s.garantia}\nTécnico: ${U(s.tecnico).nombre}\n\n¡Gracias por confiar en nosotros!`}
 const LOGO=(document.querySelector('header img')||{}).src||'';
+const fotoCache={};
+async function fotoDato(f){if(!f||f.startsWith('data:'))return f;if(fotoCache[f])return fotoCache[f];
+ try{const r=await apiSheets('foto',{id:f});fotoCache[f]=r.dato;return r.dato}catch(e){return ''}}
+async function conFotos(s){const c={...s};c.fotos=(await Promise.all((s.fotos||[]).map(fotoDato))).filter(Boolean);c.fotosFin=(await Promise.all((s.fotosFin||[]).map(fotoDato))).filter(Boolean);return c}
 function pdfRecibo(s){const {jsPDF}=window.jspdf;const d=new jsPDF({unit:'mm',format:'a5'});const N=state.negocio,W=148;let y=0;
  const azul=[20,80,180],rojo=[214,40,40],gris=[107,116,128],tx=[29,36,48];
  d.setFillColor(...azul);d.rect(0,0,W*0.62,34,'F');d.setFillColor(...rojo);d.rect(W*0.62,0,W*0.38,34,'F');
@@ -686,13 +681,13 @@ function pdfRecibo(s){const {jsPDF}=window.jspdf;const d=new jsPDF({unit:'mm',fo
  for(let i=1;i<=d.getNumberOfPages();i++){d.setPage(i);d.setFillColor(...azul);d.rect(0,207,W*0.62,3,'F');d.setFillColor(...rojo);d.rect(W*0.62,207,W*0.38,3,'F')}
  return {doc:d,nombre:`Recibo-${(N.nombre||'ACETEC').replace(/\s+/g,'')}-${num}-${s.cliente.replace(/[^\wáéíóúñÁÉÍÓÚÑ]+/g,'_')}.pdf`}}
 async function compartirPDF(id){const s=state.servicios.find(x=>x.id===id);if(!window.jspdf){toast('Cargando el generador de PDF, intenta de nuevo en unos segundos');return}
- const {doc,nombre}=pdfRecibo(s),blob=doc.output('blob'),file=new File([blob],nombre,{type:'application/pdf'});
+ const {doc,nombre}=pdfRecibo(await conFotos(s)),blob=doc.output('blob'),file=new File([blob],nombre,{type:'application/pdf'});
  const texto=`Hola ${s.cliente}, le enviamos el comprobante de su servicio. ¡Gracias por confiar en ${state.negocio.nombre}!`;
  try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:nombre,text:texto});return}}catch(e){if(e.name==='AbortError')return}
  await descargarPDF(blob,nombre);
  modal(`<h3 style="margin-top:0">⟪file⟫ PDF guardado</h3><p>Se descargó <b>${esc(nombre)}</b>.</p><p>Ahora abre el chat del cliente y adjúntalo con el clip ⟪clip⟫ → Documento.</p>
  <div class="row"><a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/${waNum(s.tel)}?text=${encodeURIComponent(texto)}">⟪chat⟫ Abrir chat del cliente</a><button class="btn" onclick="verRecibo('${id}')">Volver</button></div>`)}
-async function verPDF(id){const s=state.servicios.find(x=>x.id===id);if(!window.jspdf)return toast('Cargando el generador de PDF…');const {doc,nombre}=pdfRecibo(s);await descargarPDF(doc.output('blob'),nombre)}
+async function verPDF(id){const s=state.servicios.find(x=>x.id===id);if(!window.jspdf)return toast('Cargando el generador de PDF…');const {doc,nombre}=pdfRecibo(await conFotos(s));await descargarPDF(doc.output('blob'),nombre)}
 async function descargarPDF(blob,nombre){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nombre;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},4000)}
 
 function parseUbic(t){t=String(t||'');let m=t.match(/@(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/)||t.match(/!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/)||t.match(/[?&](?:q|query|ll|daddr|destination|center)=(?:loc:)?(-?\d{1,2}\.\d+)(?:,|%2C|\s)+(-?\d{1,3}\.\d+)/i)||t.match(/(-?\d{1,2}\.\d{4,})\s*,\s*(-?\d{1,3}\.\d{4,})/);
@@ -728,7 +723,7 @@ function actualizarCorreo(id){const s=state.servicios.find(x=>x.id===id),to=docu
  m_gmail.href=L.gmail;m_outlook.href=L.outlook;m_app.href=L.app}
 function guardarCorreo(id){const s=state.servicios.find(x=>x.id===id),v=document.getElementById('m_to').value.trim();if(v&&v!==s.mail){s.mail=v;save()}}
 async function compartirPDFCorreo(id){const s=state.servicios.find(x=>x.id===id);guardarCorreo(id);if(!window.jspdf)return toast('Cargando el generador de PDF…');
- const {doc,nombre}=pdfRecibo(s),file=new File([doc.output('blob')],nombre,{type:'application/pdf'}),{asunto,cuerpo}=datosCorreo(s);
+ const {doc,nombre}=pdfRecibo(await conFotos(s)),file=new File([doc.output('blob')],nombre,{type:'application/pdf'}),{asunto,cuerpo}=datosCorreo(s);
  try{if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file],title:asunto,text:cuerpo});return}}catch(e){if(e.name==='AbortError')return}
  await descargarPDF(doc.output('blob'),nombre);toast('PDF descargado: adjúntalo en el correo')}
 function enviarCorreo(id){const s=state.servicios.find(x=>x.id===id),L=enlacesCorreo(s,s.mail||''),movil=!!(navigator.canShare&&/Android|iPhone|iPad/i.test(navigator.userAgent));
@@ -746,7 +741,7 @@ function enviarCorreo(id){const s=state.servicios.find(x=>x.id===id),L=enlacesCo
 let reciboTxt='';
 function waNum(t){let d=String(t||'').replace(/\D/g,'');if(d.startsWith('57')&&d.length>10)d=d.slice(2);return '57'+d}
 function guardarTel(id){const s=state.servicios.find(x=>x.id===id),v=document.getElementById('r_tel').value.replace(/\D/g,'');if(s&&v&&v!==s.tel){s.tel=v;save()}}
-function verRecibo(id){const s=state.servicios.find(x=>x.id===id),N=state.negocio,t=textoRecibo(s);reciboTxt=t;
+function verRecibo(id){const s=state.servicios.find(x=>x.id===id),N=state.negocio,t=textoRecibo(s);conFotos(s);reciboTxt=t;
  modal(`<div class="receipt"><div style="text-align:center"><img src="data:image/jpeg;base64,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" style="width:90px;height:90px;border-radius:50%"></div><h3>${esc(N.nombre)}</h3><div style="text-align:center">${esc(N.lema||'')}</div>${N.tel?`<div style="text-align:center">WhatsApp ${esc(N.tel)}</div>`:''}${N.dir?`<div style="text-align:center">${esc(N.dir)}</div>`:''}<hr>
  <b>COMPROBANTE N° ${String(s.consecutivo).padStart(4,'0')}</b><br>${new Date(s.cerradoEn).toLocaleString('es-CO')}<hr>
  Cliente: ${esc(s.cliente)}<br>Tel: ${esc(s.tel)}<br>Dir: ${esc(s.dir)}<hr>Producto: ${esc(s.producto)}<br>Falla: ${esc(s.falla)}<br>Trabajo: ${esc(s.trabajo)}${s.repUsados?'<br>Repuestos: '+esc(s.repUsados):''}<hr>
@@ -778,7 +773,7 @@ function vHist(){const l=vivos().filter(s=>s.estado==='hecho'&&(s.cliente+s.tel+
 function vAjustes(){const N=state.negocio;
  return `<h2>Usuarios</h2>${state.users.map(u=>`<div class="card"><div class="row"><div class="grow"><label>Nombre</label><input value="${esc(u.nombre)}" onchange="state.users.find(x=>x.id==='${u.id}').nombre=this.value;save();render()"></div>
  <div class="grow"><label>Rol</label><input value="${esc(u.rol)}" onchange="state.users.find(x=>x.id==='${u.id}').rol=this.value;save()"></div>
- <div class="muted" style="width:100%">${u.email?'⟪key⟫ Entra con: '+esc(u.email):`Sin acceso todavía · <a href="#" onclick="formUsuario('${u.id}');return false">darle correo y clave</a>`}</div>
+ 
  ${state.users.length>1&&u.id!==state.cur?`<button class="btn sm dg" style="margin-top:22px" onclick="state.users=state.users.filter(x=>x.id!=='${u.id}');if(state.cur==='${u.id}')state.cur=state.users[0].id;save();render()">Quitar</button>`:''}</div></div>`).join('')}
  <button class="btn pr" onclick="formUsuario()">⟪plus⟫ Agregar usuario</button>
  ${'Notification' in window&&Notification.permission!=='granted'?`<div class="card row" style="margin-top:16px"><div class="grow"><b>Avisos en el celular</b><div class="muted">Te avisa al abrir la app qué servicio lleva más tiempo esperando.</div></div><button class="btn pr" onclick="activarAvisos()">⟪bell⟫ Activar avisos</button></div>`:''}
