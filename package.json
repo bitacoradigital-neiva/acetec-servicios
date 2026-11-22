@@ -1,0 +1,9 @@
+{
+  "name": "acetec-servicios",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ACETEC – agenda, rutas y recibos de servicio técnico (PWA con modo sin señal)",
+  "scripts": {
+    "build": "node scripts/generar-config.mjs"
+  }
+}
