@@ -58,5 +58,6 @@ create policy "equipo acetec" on public.permitidos for all to authenticated
   using (public.es_del_equipo()) with check (public.es_del_equipo());
 
 -- 👇 CAMBIA este correo por el de Jorge (el primer usuario). Los demás se agregan desde la app.
+-- (el correo del dueño se agrega al configurar)
 insert into public.permitidos (email) values (lower('CORREO_DE_JORGE@gmail.com'))
   on conflict do nothing;

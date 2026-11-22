@@ -433,8 +433,8 @@ async function conectar(){
  if(!window.supabase||!window.ACETEC_CONFIG||!ACETEC_CONFIG.SUPABASE_URL.startsWith('http')){dbState='local';estado();return}
  sb=supabase.createClient(ACETEC_CONFIG.SUPABASE_URL,ACETEC_CONFIG.SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});
  const {data}=await sb.auth.getSession();sesion=data.session;
- sb.auth.onAuthStateChange((_e,s)=>{sesion=s});
- if(!sesion){dbState='sinclave';estado();return}
+ sb.auth.onAuthStateChange((_e,s)=>{sesion=s;if(!s)mostrarLogin()});
+ if(!sesion){mostrarLogin();return}
  ocultarLogin();sincronizar();setInterval(()=>{if(document.visibilityState==='visible')sincronizar()},30000)}
 function mostrarLogin(){document.getElementById('login').style.display='flex'}
 function ocultarLogin(){document.getElementById('login').style.display='none'}
