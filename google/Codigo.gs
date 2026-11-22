@@ -1,6 +1,6 @@
 // ACETEC – programa que conecta la app con esta hoja de cálculo.
 // Va en la hoja: Extensiones → Apps Script. Se publica como «Aplicación web».
-// La pestaña «Ajustes» guarda el correo (B1) y la clave (B2) para entrar a la app.
+// La app entra sin clave. Si algún día se quiere clave, se escribe en «Ajustes» B2 (y el correo en B1).
 
 const HOJA_SERVICIOS = 'Servicios';
 const HOJA_CONFIG = 'Config';
@@ -25,7 +25,7 @@ function doPost(e) {
   const aj = ss.getSheetByName(HOJA_AJUSTES);
   const correo = String(aj.getRange('B1').getDisplayValue()).trim().toLowerCase();
   const clave = String(aj.getRange('B2').getDisplayValue());
-  if (!correo || !clave || String(req.correo || '').trim().toLowerCase() !== correo || String(req.clave || '') !== clave) {
+  if (clave && (String(req.correo || '').trim().toLowerCase() !== correo || String(req.clave || '') !== clave)) {
     cache.put('fallos', String(fallos + 1), 600);
     return salida({ ok: false, error: 'codigo' });
   }
@@ -67,7 +67,7 @@ function preparar(ss) {
   let a = ss.getSheetByName(HOJA_AJUSTES);
   if (!a) {
     a = ss.insertSheet(HOJA_AJUSTES);
-    a.getRange('A1:A3').setValues([['Correo para entrar a la app'], ['Clave para entrar a la app'], ['Escribe la clave en B2. Usa una clave propia de la app, no la de Gmail. Si la cambias, cada equipo la pedirá de nuevo.']]);
+    a.getRange('A1:A3').setValues([['Correo para entrar a la app'], ['Clave para entrar a la app'], ['Opcional: deja B2 vacía para entrar sin clave. Si escribes una clave, la app pedirá correo y clave en cada equipo.']]);
     a.getRange('B1:B2').setNumberFormat('@');
     a.getRange('B1').setValue(Session.getEffectiveUser().getEmail() || '');
     a.setColumnWidth(1, 220);

@@ -432,7 +432,7 @@ async function sincronizar(){await flush();await pull();await flush()}
 async function conectar(){
  if(!window.ACETEC_CONFIG||!String(ACETEC_CONFIG.SHEETS_URL||'').startsWith('https://')){dbState='local';estado();return}
  api=ACETEC_CONFIG.SHEETS_URL;
- if(!codigo){mostrarLogin();return}
+ if(!codigo)codigo={correo:'',clave:''};
  ocultarLogin();sincronizar();setInterval(()=>{if(document.visibilityState==='visible')sincronizar()},30000)}
 function mostrarLogin(){document.getElementById('login').style.display='flex'}
 function ocultarLogin(){document.getElementById('login').style.display='none'}
