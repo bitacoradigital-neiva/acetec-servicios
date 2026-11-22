@@ -19,74 +19,46 @@ Todos los usuarios ven la agenda y el historial de visitas ya hechas, con el nom
 GitHub (código)  ──►  Vercel (publica la app)  ──►  celular / computador
                                                      │   ▲
                                                      ▼   │  sincroniza
-                                                 Supabase (datos)
+                                     Google Sheets del cliente (datos) + Drive (fotos)
 ```
 
 - **GitHub**: guarda el código.
-- **Vercel**: publica la app en una dirección como `acetec-servicios.vercel.app`. Cada cambio que se suba a GitHub se publica solo.
-- **Supabase**: base de datos donde quedan los servicios, usuarios y recibos. Es lo que hace que el celular y el computador vean lo mismo.
+- **Vercel**: publica la app en `https://acetec-servicios.vercel.app`. Cada cambio que se suba a GitHub se publica solo.
+- **Google Sheets**: la hoja «ACETEC – Datos de la app» en la cuenta del cliente guarda los servicios (pestaña *Servicios*) y la configuración. Las fotos quedan en la carpeta de Drive «ACETEC – fotos de servicios».
+- La app entra **sin clave**. Si algún día se quiere clave, se escribe en la pestaña *Ajustes* de la hoja (B1 correo, B2 clave).
 
 ---
 
-## 1. Base de datos (Supabase) – una sola vez
+## Conexión con Google Sheets
 
-1. Crea una cuenta en https://supabase.com → **New project** (`acetec`, región **São Paulo**). Guarda la clave de la base de datos.
-2. **SQL Editor → New query**: pega el contenido de `base-de-datos.sql`.
-   **Antes de ejecutarlo, cambia `CORREO_DE_JORGE@gmail.com` (al final) por el correo real de Jorge.** Luego **Run**.
-3. **Authentication → Sign In / Providers → Email**: desactiva **Confirm email**.
-4. **Authentication → Users → Add user**: correo de Jorge + clave, marca **Auto Confirm User**.
-5. **Project Settings → API**: copia la **Project URL** y la **anon public key**.
-   (Nunca uses la *service_role key*.)
+1. En la hoja: **Extensiones → Apps Script**, pegar `google/Codigo.gs` y guardar.
+2. **Ejecutar** una vez y dar **Permitir** con la cuenta dueña de la hoja (si el Chrome tiene varias cuentas, hacerlo en una ventana de incógnito).
+3. **Implementar → Nueva implementación → App web**, *Ejecutar como: Yo*, *Acceso: Cualquiera* → copiar la URL que termina en `/exec`.
+4. En Vercel → *Settings → Environment Variables*: `SHEETS_URL` = esa URL → **Redeploy**.
 
-## 2. Subir el código a GitHub
+Si se cambia el código del programa, hay que hacer **Implementar → Administrar implementaciones → editar → Nueva versión** para que la app use el cambio.
 
-**Opción fácil (sin comandos):**
-1. https://github.com/new → nombre `acetec-servicios` → **Private** → *Create repository*.
-2. En la página del repo: **uploading an existing file** → arrastra **todo el contenido** de esta carpeta (incluida la carpeta `public` y `scripts`) → *Commit changes*.
-
-**Opción con comandos (si tienes Git instalado):**
-```bash
-cd acetec-repo
-git remote add origin https://github.com/TU_USUARIO/acetec-servicios.git
-git push -u origin main
-```
-(La carpeta ya trae el primer commit hecho.)
-
-## 3. Publicar con Vercel
-
-1. https://vercel.com → entra con tu cuenta de **GitHub**.
-2. **Add New → Project** → elige `acetec-servicios` → **Import**.
-3. Despliega **Environment Variables** y agrega:
-   | Name | Value |
-   |---|---|
-   | `SUPABASE_URL` | la Project URL de Supabase |
-   | `SUPABASE_ANON_KEY` | la anon public key |
-4. **Deploy**. En un minuto queda en algo como `https://acetec-servicios.vercel.app`.
-
-> Si cambias las variables después: Vercel → *Deployments* → ⋯ → **Redeploy**.
-
-## 4. Instalar
+## Instalar
 
 - **Android (Chrome)**: abre la dirección → **Instalar app** (o menú ⋮ → *Instalar aplicación*).
 - **iPhone (Safari)**: **Compartir → Agregar a inicio**.
 - **Computador (Chrome/Edge)**: ícono de instalar en la barra de direcciones.
-
-Entra con el correo y la clave de Jorge. Los demás usuarios (Usuario 2, Juliana, el muchacho del taller) se crean desde **⚙️ Usuarios** dentro de la app.
 
 ---
 
 ## Cómo funciona la sincronización
 
 - Todo lo que se hace (servicio nuevo, cambio, cierre con fotos) se guarda **primero en el equipo**.
-- Con señal, se sube a Supabase de inmediato; sin señal, queda en cola y arriba dice *"📴 Sin señal · N cambios guardados"*.
+- Con señal, se sube a la hoja de Google de inmediato; sin señal, queda en cola y arriba dice *"📴 Sin señal · N cambios guardados"*.
 - Cada equipo baja los cambios de los demás al abrir la app, al volver la señal y cada 30 segundos mientras está abierta.
+- Las fotos se suben a Drive y en el celular solo queda el enlace, así no se llena la memoria.
 - Si dos personas editan el mismo servicio, queda la última versión guardada.
 - La primera vez que se entra en un equipo se necesita señal.
 
 ## Hacer cambios a la app
 
 Edita los archivos dentro de `public/` y súbelos a GitHub: Vercel publica solo.
-**Importante:** sube el número en `public/sw.js` (`acetec-v1` → `acetec-v2`) para que los celulares reciban la nueva versión.
+**Importante:** sube el número en `public/sw.js` (por ejemplo `acetec-v12` → `acetec-v13`) para que los celulares reciban la nueva versión.
 
 ## Archivos
 
@@ -95,7 +67,6 @@ Edita los archivos dentro de `public/` y súbelos a GitHub: Vercel publica solo.
 | `public/index.html` | La app completa |
 | `public/sw.js` | Hace que la app abra sin señal |
 | `public/manifest.webmanifest`, `icon-*.png` | Nombre e ícono al instalar |
-| `public/vendor/supabase.js` | Conexión con la base de datos (incluida para que funcione sin internet) |
-| `scripts/generar-config.mjs` | Vercel lo usa para poner las claves de Supabase |
-| `base-de-datos.sql` | Crea las tablas y la seguridad en Supabase |
+| `scripts/generar-config.mjs` | Vercel lo usa para poner la dirección del programa de Google (`SHEETS_URL`) |
+| `google/Codigo.gs` | Programa que va en la hoja de Google (Apps Script) |
 | `vercel.json` | Configuración de Vercel |
