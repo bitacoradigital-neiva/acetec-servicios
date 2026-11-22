@@ -31,6 +31,12 @@ function doPost(e) {
   }
   try {
     if (req.accion === 'probar') return salida({ ok: true });
+    if (req.accion === 'cambiarClave') {
+      const nueva = String(req.nueva || '');
+      if (nueva.length < 6) return salida({ ok: false, error: 'corta' });
+      aj.getRange('B2').setNumberFormat('@').setValue(nueva);
+      return salida({ ok: true });
+    }
     if (req.accion === 'bajar') return salida(Object.assign({ ok: true }, bajar(ss, Number(req.desde || 0))));
     if (req.accion === 'foto') return salida({ ok: true, dato: fotoComoDato(String(req.id || '')) });
     if (req.accion === 'subir') {
